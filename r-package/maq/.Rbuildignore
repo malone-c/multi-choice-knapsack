@@ -1,7 +1,0 @@
-^maq\.Rproj$
-^\.Rproj\.user$
-^docs$
-^tests/benchmarks
-^tests/valgrind
-^_pkgdown\.yml$
-^pkgdown$
