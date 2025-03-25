@@ -13,7 +13,6 @@
 #include "convex_hull.hpp"
 #include "compute_path.hpp"
 #include "DataMean.hpp"
-#include "Sampler.hpp"
 #include "SolverOptions.hpp"
 
 namespace maq {
@@ -53,27 +52,20 @@ class Solver {
         samples.push_back(sample);
       }
 
-      std::vector<std::vector<size_t>> R;
-      solution_path path_hat;
-      if (options.target_with_covariates) {
-        R = convex_hull(data);
-        path_hat = compute_path(samples, R, data, options.budget, false);
-      } else {
-        auto mean_data = DataMean<DataType>(data, samples);
-        R = convex_hull(mean_data);
-        path_hat = compute_path(samples, R[0], mean_data, options.budget, false);
-      }
+      std::vector<std::vector<size_t>> R = convex_hull(data);
+      solution_path path_hat = compute_path(samples, R, data, options.budget, false);
 
       auto gain_bs = fit_paths(path_hat, R);
-      compute_std_err(path_hat, gain_bs);
 
       return std::make_pair(path_hat,
         options.paired_inference ? std::move(gain_bs) : std::vector<std::vector<double>>());
     }
 
   private:
-    std::vector<std::vector<double>> fit_paths(const solution_path& path_hat,
-                                               const std::vector<std::vector<size_t>>& R) {
+    std::vector<std::vector<double>> fit_paths(
+      const solution_path& path_hat,
+      const std::vector<std::vector<size_t>>& R
+    ) {
       std::vector<unsigned int> thread_ranges;
       split_sequence(thread_ranges, 0, static_cast<unsigned int>(options.num_bootstrap - 1), options.num_threads);
 
@@ -87,13 +79,17 @@ class Solver {
         size_t start_index = thread_ranges[i];
         size_t num_replicates_batch = thread_ranges[i + 1] - start_index;
 
-        futures.push_back(std::async(std::launch::async,
-                                    &Solver::fit_paths_batch,
-                                    this,
-                                    start_index,
-                                    num_replicates_batch,
-                                    std::ref(path_hat),
-                                    std::ref(R)));
+        futures.push_back(
+          std::async(
+            std::launch::async,
+            &Solver::fit_paths_batch,
+            this,
+            start_index,
+            num_replicates_batch,
+            std::ref(path_hat),
+            std::ref(R)
+          )
+        );
       }
 
       for (auto& future : futures) {
@@ -106,23 +102,18 @@ class Solver {
       return predictions;
     }
 
-    std::vector<std::vector<double>> fit_paths_batch(size_t start,
-                                                     size_t num_replicates,
-                                                     const solution_path& path_hat,
-                                                     const std::vector<std::vector<size_t>>& R) {
+    std::vector<std::vector<double>> fit_paths_batch(
+      size_t start,
+      size_t num_replicates,
+      const solution_path& path_hat,
+      const std::vector<std::vector<size_t>>& R
+      ) {
       std::vector<std::vector<double>> predictions;
       predictions.reserve(num_replicates);
 
       for (size_t b = 0; b < num_replicates; b++) {
         std::vector<size_t> samples = Sampler<DataType>::sample(data, 0.5, options.random_seed + start + b);
-        solution_path path_b;
-        if (options.target_with_covariates) {
-          path_b = compute_path(samples, R, data, options.budget, true);
-        } else {
-          auto mean_data = DataMean<DataType>(data, samples);
-          auto R_mean = convex_hull(mean_data);
-          path_b = compute_path(samples, R_mean[0], mean_data, options.budget, true);
-        }
+        solution_path path_b = compute_path(samples, R, data, options.budget, true);
         auto gain_b = interpolate_path(path_hat, path_b);
         predictions.push_back(std::move(gain_b));
       }
@@ -170,51 +161,6 @@ class Solver {
       return gain_b_interp;
     }
 
-    void compute_std_err(solution_path& path_hat,
-                         const std::vector<std::vector<double>>& gain_bs) {
-      size_t grid_len = path_hat.first[0].size();
-      std::vector<double>& std_err = path_hat.first[2];
-      std_err.resize(grid_len);
-      if (gain_bs.size() < 2) {
-        return;
-      }
-
-      for (size_t i = 0; i < grid_len; i++) {
-        // Use Welford's algorithm to get numerically stable variance estimates in one pass.
-        double Mprev;
-        double M;
-        double Sprev = -1;
-        double S;
-        double n = 0;
-        for (size_t b = 0; b < gain_bs.size(); b++) {
-          if (gain_bs[b].size() < 1) {
-            continue;
-          }
-          double val = gain_bs[b][i];
-          if (std::isnan(val)) {
-            continue;
-          }
-          n++;
-          if (Sprev == -1) {
-            Mprev = val;
-            Sprev = 0;
-            continue;
-          }
-          M = Mprev + (val - Mprev) / n;
-          S = Sprev + (val - Mprev) * (val - M);
-
-          Mprev = M;
-          Sprev = S;
-        }
-        if (n >= 2) {
-          std_err[i] = sqrt(S / (n - 1));
-        } else {
-          // these are early grid points where min(\hat path spend) < min(path bs spend).
-          std_err[i] = 0; // define these to be zero.
-        }
-      }
-
-    }
 
     void split_sequence(std::vector<unsigned int>& result,
                         unsigned int start,

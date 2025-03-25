@@ -99,56 +99,6 @@ solution_path compute_path(const std::vector<size_t>& samples,
   return std::make_pair(std::move(spend_gain), std::move(i_k_path));
 }
 
-template <class DataType>
-solution_path compute_path(const std::vector<size_t>& samples,
-                           const std::vector<size_t>& R,
-                           const DataType& data,
-                           double budget,
-                           bool bootstrap) {
-  std::vector<std::vector<double>> spend_gain(3);
-  std::vector<std::vector<size_t>> i_k_path(3);
-  size_t complete_path = 1;
-  bool active_arm = false;
-
-  double spend = 0;
-  double gain = 0;
-  double bs_weight = bootstrap ? 4 : 1;
-  size_t previous_arm;
-  for (auto arm : R) {
-    for (auto sample : samples) {
-      if (active_arm) {
-        spend -= bs_weight * data.get_cost(sample, previous_arm);
-        gain -= bs_weight * data.get_reward_scores(sample, previous_arm);
-      }
-
-      double cost = data.get_cost(sample, arm);
-      double reward_score = data.get_reward_scores(sample, arm);
-
-      spend += bs_weight * cost;
-      gain += bs_weight * reward_score;
-      spend_gain[0].push_back(spend);
-      spend_gain[1].push_back(gain);
-      if (!bootstrap) {
-        i_k_path[0].push_back(sample);
-        i_k_path[1].push_back(arm);
-      }
-      if (spend >= budget) {
-        complete_path = 0;
-        i_k_path[2].push_back(complete_path);
-        return std::make_pair(std::move(spend_gain), std::move(i_k_path));
-      }
-    }
-    active_arm = true;
-    previous_arm = arm;
-  }
-
-  if (!bootstrap) {
-    i_k_path[2].push_back(complete_path);
-  }
-
-  return std::make_pair(std::move(spend_gain), std::move(i_k_path));
-}
-
 } // namespace maq
 
 #endif // MAQ_COMPUTE_PATH_HPP

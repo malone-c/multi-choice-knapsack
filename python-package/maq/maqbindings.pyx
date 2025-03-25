@@ -5,15 +5,16 @@ from libcpp cimport bool
 
 from maq.maqdefs cimport pair, vector, solution_path, run
 
-cpdef solver_cpp(np.ndarray[double, ndim=2, mode="c"] reward,
-                 np.ndarray[double, ndim=2, mode="c"] reward_scores,
-                 np.ndarray[double, ndim=2, mode="c"] cost,
-                 double budget,
-                 int target_with_covariates,
-                 unsigned int n_bootstrap,
-                 int paired_inference,
-                 unsigned int num_threads,
-                 unsigned int seed):
+cpdef solver_cpp(
+    np.ndarray[double, ndim=2, mode="c"] reward,
+    np.ndarray[double, ndim=2, mode="c"] reward_scores,
+    np.ndarray[double, ndim=2, mode="c"] cost,
+    double budget,
+    unsigned int n_bootstrap,
+    int paired_inference,
+    unsigned int num_threads,
+    unsigned int seed
+):
     cdef size_t num_rows = np.PyArray_DIMS(reward)[0]
     cdef size_t num_cols = np.PyArray_DIMS(reward)[1]
     cdef bool cost_matrix = True
@@ -36,7 +37,6 @@ cpdef solver_cpp(np.ndarray[double, ndim=2, mode="c"] reward,
         tie_breaker_ptr,
         clusters_ptr,
         budget,
-        target_with_covariates,
         paired_inference,
         n_bootstrap,
         num_threads,

@@ -16,7 +16,6 @@ cdef extern from "MAQ.h":
         const int* data_tie_breaker,
         const int* clusters,
         double budget,
-        bool target_with_covariates,
         bool paired_inference,
         unsigned int num_bootstrap,
         unsigned int num_threads,

@@ -99,11 +99,6 @@ class MAQ:
         Setting this to None (Default), will fit the path up to a maximum spend per unit
         where each unit that is expected to benefit is treated (that is, hat tau_k(X_i) > 0).
 
-    target_with_covariates : bool, default=True
-        If TRUE, then the optimal policy takes covariates into account. If FALSE, then the optimal policy
-        only takes the average reward and cost into account when allocating treatment. Can be used to
-        construct a baseline Qini curve to assess the value of targeting with covariates.
-
     n_bootstrap : int, default=0
         Number of bootstrap replicates for SEs. Default is 0 (only point estimates are computed).
 
@@ -178,7 +173,6 @@ class MAQ:
     def __init__(
         self,
         budget=None,
-        target_with_covariates=True,
         n_bootstrap=0,
         paired_inference=True,
         n_threads=0,
@@ -190,7 +184,6 @@ class MAQ:
         assert n_threads >= 0, "n_threads should be >=0."
         assert n_bootstrap >= 0, "n_bootstrap should be >=0."
         self.budget = budget
-        self.target_with_covariates = target_with_covariates
         self.n_bootstrap = n_bootstrap
         self.paired_inference = paired_inference
         self.n_threads = n_threads
@@ -244,7 +237,6 @@ class MAQ:
             np.ascontiguousarray(DR_scores),
             np.ascontiguousarray(cost),
             self.budget,
-            self.target_with_covariates,
             self.n_bootstrap,
             self.paired_inference,
             self.n_threads,

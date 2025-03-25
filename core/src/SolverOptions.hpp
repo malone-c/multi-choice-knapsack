@@ -6,14 +6,14 @@
 namespace maq {
 
 struct SolverOptions {
-  SolverOptions(double budget,
-                bool target_with_covariates,
-                bool paired_inference,
-                unsigned int num_bootstrap,
-                unsigned int num_threads,
-                unsigned int random_seed) :
+  SolverOptions(
+    double budget,
+    bool paired_inference,
+    unsigned int num_bootstrap,
+    unsigned int num_threads,
+    unsigned int random_seed
+  ):
       budget(budget),
-      target_with_covariates(target_with_covariates),
       paired_inference(paired_inference),
       num_bootstrap(num_bootstrap),
       random_seed(random_seed) {
@@ -24,7 +24,6 @@ struct SolverOptions {
   }
 
   double budget;
-  bool target_with_covariates;
   bool paired_inference;
   unsigned int num_bootstrap;
   unsigned int num_threads;
