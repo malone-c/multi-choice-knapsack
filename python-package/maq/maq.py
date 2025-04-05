@@ -278,6 +278,7 @@ class MAQ:
         if not self._path["complete_path"] and spend > self.budget:
             raise ValueError("maq path is not fit beyond given spend level.")
 
+        # Binary search to get the point in the path when we hit this budget
         spend_grid = self._path["spend"]
         path_idx = np.searchsorted(spend_grid, spend, side="right") - 1
         if path_idx < 0:
@@ -288,6 +289,7 @@ class MAQ:
 
         ipath = self._path["ipath"][: path_idx + 1]
         kpath = self._path["kpath"][: path_idx + 1]
+        # Get indices of first instances of unique units in reverse order (last time the treatment was set for each unit)
         ix = np.unique(ipath[::-1], return_index=True)[1]
 
         if prediction_type == "vector":
