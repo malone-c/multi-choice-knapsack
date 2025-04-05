@@ -21,7 +21,7 @@ solution_path run(
   SolverOptions options(budget, num_threads);
 
   // Data data(treatment_id_arrays, reward_arrays, cost_arrays);
-  auto treatment_arrays = process_data(
+  std::vector<std::vector<Treatment>> treatment_arrays = process_data(
     treatment_id_arrays,
     reward_arrays,
     cost_arrays
@@ -30,7 +30,6 @@ solution_path run(
   Solver maq(treatment_arrays, options);
 
   return maq.fit();
-
 }
 
 } // namespace maq

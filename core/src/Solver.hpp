@@ -41,17 +41,11 @@ namespace maq {
 class Solver {
   public:
     Solver(
-      std::vector<std::vector<unsigned int>> treatment_id_arrays,
-      std::vector<std::vector<double>> reward_arrays,
-      std::vector<std::vector<double>> cost_arrays,
+      std::vector<std::vector<Treatment>>& treatment_arrays,
       const SolverOptions& options
-    ) : options(options) {
-      std::vector<std::vector<Treatment>> treatment_arrays = process_data(
-        treatment_id_arrays,
-        reward_arrays,
-        cost_arrays
-      );
-    }
+    ) : 
+      treatment_arrays(treatment_arrays),
+      options(options) {}
 
     solution_path fit() {
       convex_hull(treatment_arrays); // Prune in-place
