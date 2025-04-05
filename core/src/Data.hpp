@@ -3,117 +3,81 @@
 
 #include <cstddef>
 #include <vector>
+#include <string>
 
 namespace maq {
 
-enum class Storage {ColMajor, RowMajor};
-enum class SampleWeights {Default, Provided};
-enum class TieBreaker {Default, Provided};
-enum class CostType {Matrix, Vector};
+struct prediction {
+  std::string product_id;
+  double cost;
+  double reward;
+};
 
 /**
- * Read-only data wrapper for column or row major storage.
+ * Read-only data wrapper.
  *
  * Costs should be > 0
  * Weights should be > 0 and sum to 1
  * Clusters, if present, should be labeled as consecutive integers 0, ..., num_clusters
  *
  */
-template <Storage storage, SampleWeights sample_weights, TieBreaker tie_breaker, CostType cost_type>
+
+struct Treatment {
+  unsigned int id;
+  double reward;
+  double cost;
+};
+
+// TODO: Optimise data by storing rewards and costs in std::vector<std::unordered_map<int double[2]>>
+// and then looking them up by treatment ID, which is stored in std::vector<std::vector<int>> treatment_id_arrays 
+// This should be more memory efficient but pruning will be more complex because we need to update the unordered maps.
+// Trade-off is between memory and code complexity
+
+std::vector<std::vector<Treatment>> process_data(
+  std::vector<std::vector<unsigned int>>& treatment_id_arrays,
+  std::vector<std::vector<double>>& reward_arrays,
+  std::vector<std::vector<double>>& cost_arrays
+) {
+  size_t num_units = treatment_id_arrays.size();
+  std::vector<std::vector<Treatment>> treatment_arrays;
+  treatment_arrays.resize(num_units);
+
+  for (size_t i = 0; i < num_units; ++i) {
+    size_t num_treatments = treatment_id_arrays[i].size();
+    for (size_t j = 0; j < num_treatments; ++j) {
+      Treatment treatment = {
+        treatment_id_arrays[i][j],
+        reward_arrays[i][j],
+        cost_arrays[i][j]
+      };
+      treatment_arrays[i].push_back(treatment);
+    };
+  }
+  return treatment_arrays;
+}
+
+// TODO: This is not used ATM. Integrate or remove it.
 class Data {
 public:
-  Data(const double* data_reward,
-       const double* data_reward_scores,
-       const double* data_cost,
-       size_t num_rows,
-       size_t num_cols,
-       const double* data_weight = nullptr,
-       const int* data_tie_breaker = nullptr,
-       const int* clusters = nullptr) :
-    data_reward(data_reward),
-    data_reward_scores(data_reward_scores),
-    data_cost(data_cost),
-    num_rows(num_rows),
-    num_cols(num_cols),
-    data_weight(data_weight),
-    data_tie_breaker(data_tie_breaker) {
-
-    // If clusters are present, then fill samples_by_cluster with samples belonging to each cluster.
-    if (clusters != nullptr) {
-      size_t num_clusters = 0;
-      for (size_t sample = 0; sample < num_rows; sample++) {
-        size_t cluster_id = clusters[sample];
-        if (num_clusters < cluster_id) {
-          num_clusters = cluster_id;
-        }
-      }
-      samples_by_cluster.resize(num_clusters + 1);
-
-      for (size_t sample = 0; sample < num_rows; sample++) {
-        size_t cluster_id = clusters[sample];
-        samples_by_cluster[cluster_id].push_back(sample);
-      }
-    }
+  Data(
+    std::vector<std::vector<unsigned int>>& treatment_id_arrays,
+    std::vector<std::vector<double>>& reward_arrays,
+    std::vector<std::vector<double>>& cost_arrays
+  ) {
+    size_t num_units = treatment_id_arrays.size();
+    std::vector<std::vector<Treatment>> treatment_arrays = process_data(
+      treatment_id_arrays,
+      reward_arrays,
+      cost_arrays
+    );
   }
 
-  double get_reward(size_t row, size_t col) const {
-     return data_reward[index(row, col)] * get_weight(row);
-  }
+  int get_tie_breaker(size_t row) const { return row; }
 
-  double get_reward_scores(size_t row, size_t col) const {
-    return data_reward_scores[index(row, col)] * get_weight(row);
-  }
-
-  double get_cost(size_t row, size_t col) const {
-    if (cost_type == CostType::Matrix) {
-      return data_cost[index(row, col)] * get_weight(row);
-    } else {
-      return data_cost[col] * get_weight(row);
-    }
-  }
-
-  size_t get_num_rows() const {
-    return num_rows;
-  }
-
-  size_t get_num_cols() const {
-    return num_cols;
-  }
-
-  int get_tie_breaker(size_t row) const {
-    if (tie_breaker == TieBreaker::Default) {
-      return row;
-    } else {
-      return data_tie_breaker[row];
-    }
-  }
-
-  std::vector<std::vector<size_t>> samples_by_cluster;
+  size_t get_num_units() const { return treatment_arrays.size(); }
 
 private:
-  double get_weight(size_t row) const {
-    if (sample_weights == SampleWeights::Default) {
-      return 1.0 / num_rows;
-      } else {
-      return data_weight[row];
-    }
-  }
-
-  size_t index(size_t row, size_t col) const {
-    if (storage == Storage::ColMajor) {
-      return col * num_rows + row;
-    } else {
-      return row * num_cols + col;
-    }
-  }
-
-  const double* data_reward;
-  const double* data_reward_scores;
-  const double* data_cost;
-  size_t num_rows;
-  size_t num_cols;
-  const double* data_weight;
-  const int* data_tie_breaker;
+  std::vector<std::vector<Treatment>> treatment_arrays;
 };
 
 } // namespace maq

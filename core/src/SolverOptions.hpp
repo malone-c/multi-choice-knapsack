@@ -8,15 +8,13 @@ namespace maq {
 struct SolverOptions {
   SolverOptions(
     double budget,
-    bool paired_inference,
-    unsigned int num_bootstrap,
-    unsigned int num_threads,
-    unsigned int random_seed
+    unsigned int num_threads
   ):
-      budget(budget),
-      paired_inference(paired_inference),
-      num_bootstrap(num_bootstrap),
-      random_seed(random_seed) {
+      budget(budget)
+      // paired_inference(paired_inference),
+      // num_bootstrap(num_bootstrap),
+      // random_seed(random_seed) 
+    {
     if (num_threads == 0) {
       num_threads = std::thread::hardware_concurrency();
     }
@@ -24,10 +22,7 @@ struct SolverOptions {
   }
 
   double budget;
-  bool paired_inference;
-  unsigned int num_bootstrap;
   unsigned int num_threads;
-  unsigned int random_seed;
 };
 
 } // namespace maq

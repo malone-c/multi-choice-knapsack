@@ -5,84 +5,76 @@
 #include <cstddef>
 #include <queue>
 #include <vector>
+#include "Data.hpp" // Include the header file where Data is defined
 
 namespace maq {
 
 typedef std::pair<std::vector<std::vector<double>>, std::vector<std::vector<size_t>>> solution_path;
 
 struct QueueElement {
-  QueueElement(size_t sample, size_t arm, int tie_breaker, double priority) :
-    sample(sample), arm(arm), tie_breaker(tie_breaker), priority(priority) {}
+  QueueElement(
+    size_t unit,
+    Treatment treatment,
+    double priority
+  ) : unit(unit), treatment(treatment) {}
 
-  size_t sample;
-  size_t arm;
-  int tie_breaker;
+  size_t unit;
+  Treatment treatment;
   double priority;
 };
 
 bool operator <(const QueueElement& lhs, const QueueElement& rhs) {
-  return lhs.priority < rhs.priority
-    || (lhs.priority == rhs.priority && lhs.tie_breaker > rhs.tie_breaker);
+  return lhs.priority < rhs.priority;
 }
 
-template <class DataType>
-solution_path compute_path(const std::vector<size_t>& samples,
-                           const std::vector<std::vector<size_t>>& R,
-                           const DataType& data,
-                           double budget,
-                           bool bootstrap) {
+solution_path compute_path(
+  const std::vector<std::vector<Treatment>>& treatment_arrays,
+  double budget
+) {
   std::vector<std::vector<double>> spend_gain(3); // 3rd entry: SEs
   std::vector<std::vector<size_t>> i_k_path(3); // 3rd entry: complete path
-  std::vector<size_t> active_set(data.get_num_rows(), 0); // active R entry offset by one (vec faster than hash table)
+  std::vector<size_t> active_arm_indices(treatment_arrays.size(), 0); // active treatment entry offset by one
+
+  // TODO: No point having DNS in the treatment arrays since reward = cost = 0. active_arm_indices[unit] = 0 -> DNS
+  // TODO: Initialise vector with some treatment (might be DNS or some offer). This lets us force all units to get a treatment.
 
   // Initialize PQ with initial enrollment
   std::priority_queue<QueueElement> pqueue;
-  for (auto sample : samples) {
-    if (!R[sample].empty()) {
-      size_t arm = R[sample][0];
-      int tie_breaker = data.get_tie_breaker(sample);
-      double priority = data.get_reward(sample, arm) / data.get_cost(sample, arm);
-      pqueue.emplace(sample, arm, tie_breaker, priority);
-    }
+  for (size_t unit; unit < treatment_arrays.size(); unit++) {
+    if (treatment_arrays[unit].empty()) { continue; }
+
+    Treatment treatment = treatment_arrays[unit][0];
+    double priority = treatment.reward / treatment.cost;
+    pqueue.emplace(unit, treatment, priority);
   }
 
   double spend = 0;
   double gain = 0;
-  double bs_weight = bootstrap ? 2 : 1; // "0-2" bootstrap: half-sample with weight 2.
-  while (pqueue.size() > 0 && spend < budget) {
-    auto top = pqueue.top();
+  while (!pqueue.empty() && spend < budget) {
+    QueueElement top = pqueue.top();
     pqueue.pop();
 
-    // assigned before?
-    if (active_set[top.sample] > 0) {
-      size_t active = active_set[top.sample] - 1;
-      size_t active_arm = R[top.sample][active];
-      spend -= bs_weight * data.get_cost(top.sample, active_arm);
-      gain -= bs_weight * data.get_reward_scores(top.sample, active_arm);
+    if (active_arm_indices[top.unit] > 0) { // If assigned before...
+      size_t active_arm_index = active_arm_indices[top.unit] - 1;
+      Treatment active_arm = treatment_arrays[top.unit][active_arm_index];
+      spend -= active_arm.cost;
+      gain -= active_arm.reward;
     }
 
     // assign
-    double cost = data.get_cost(top.sample, top.arm);
-    double reward = data.get_reward(top.sample, top.arm);
-
-    spend += bs_weight * cost;
-    gain += bs_weight * data.get_reward_scores(top.sample, top.arm);
+    spend += top.treatment.cost;
+    gain += top.treatment.reward;
     spend_gain[0].push_back(spend);
     spend_gain[1].push_back(gain);
-    if (!bootstrap) {
-      i_k_path[0].push_back(top.sample);
-      i_k_path[1].push_back(top.arm);
-    }
-    active_set[top.sample]++;
+    i_k_path[0].push_back(top.unit);
+    i_k_path[1].push_back(top.treatment.id);
+    active_arm_indices[top.unit]++;
 
-    // upgrade available?
-    size_t next_entry = active_set[top.sample];
-    if (R[top.sample].size() > next_entry) {
-      size_t upgrade = R[top.sample][next_entry];
-      double cost_upgrade = data.get_cost(top.sample, upgrade);
-      double reward_upgrade = data.get_reward(top.sample, upgrade);
-      double priority = (reward_upgrade - reward) / (cost_upgrade - cost);
-      pqueue.emplace(top.sample, upgrade, top.tie_breaker, priority);
+    size_t next_entry = active_arm_indices[top.unit];
+    if (treatment_arrays[top.unit].size() > next_entry) { // More treatments available for this unit?
+      Treatment upgrade = treatment_arrays[top.unit][next_entry];
+      double priority = (upgrade.reward - top.treatment.reward) / (upgrade.cost - top.treatment.cost);
+      pqueue.emplace(top.unit, upgrade, priority);
     }
 
     // have we reached maximum spend? if so stop at nearest integer solution (rounded up)
@@ -92,9 +84,7 @@ solution_path compute_path(const std::vector<size_t>& samples,
   }
 
   // "complete" path?
-  if (!bootstrap) {
-    i_k_path[2].push_back(pqueue.empty() ? 1 : 0);
-  }
+  i_k_path[2].push_back(pqueue.empty() ? 1 : 0);
 
   return std::make_pair(std::move(spend_gain), std::move(i_k_path));
 }
