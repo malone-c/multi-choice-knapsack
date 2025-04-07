@@ -1,6 +1,22 @@
-import numpy as np
+# import numpy as np
+import pyarrow as pa
 
-from maq.ext import solver_cpp
+from .ext import solver_cpp
+
+def solve(
+    treatment_id_arrays: pa.ListArray, 
+    reward_arrays: pa.ListArray,
+    cost_arrays: pa.ListArray,
+    budget: float = None,
+    n_threads: int = 0,
+):
+    return solver_cpp(
+        treatment_id_arrays,
+        reward_arrays,
+        cost_arrays,
+        budget,
+        n_threads,
+    )
 
 
 def get_ipw_scores(Y, W, W_hat=None):
@@ -173,24 +189,17 @@ class MAQ:
     def __init__(
         self,
         budget=None,
-        n_bootstrap=0,
-        paired_inference=True,
         n_threads=0,
-        seed=42,
     ):
         if budget is None:
             budget = np.finfo(np.float64).max
         assert np.isscalar(budget), "budget should be a scalar."
         assert n_threads >= 0, "n_threads should be >=0."
-        assert n_bootstrap >= 0, "n_bootstrap should be >=0."
         self.budget = budget
-        self.n_bootstrap = n_bootstrap
-        self.paired_inference = paired_inference
         self.n_threads = n_threads
-        self.seed = seed
         self._is_fit = False
 
-    def fit(self, reward, cost, DR_scores):
+    def fit(self, treatment_id_arrays, reward_arrays, cost_arrays):
         """Fit a Qini curve.
 
         Parameters
@@ -207,45 +216,56 @@ class MAQ:
         DR_scores : ndarray
             A matrix of evaluation scores to estimate the Qini curve with.
         """
-        # ensure dims are (n, K)
-        reward = np.reshape(reward, (reward.shape[0], -1))
-        DR_scores = np.reshape(DR_scores, (DR_scores.shape[0], -1))
-        # if costs are the same for each unit/arm, they can have dim (1, K)
-        if len(np.atleast_1d(cost)) == reward.shape[1]:
-            cost = np.atleast_2d(cost).astype(float)
-        else:
-            cost = np.reshape(cost, (np.atleast_1d(cost).shape[0], -1)).astype(float)
-
-        if reward.shape != DR_scores.shape or cost.shape[1] != reward.shape[1]:
-            raise ValueError(
-                "reward, costs, and evaluation scores should have conformable dimensions."
-            )
-        if cost.shape[0] > 1 and cost.shape[0] != reward.shape[0]:
-            raise ValueError(
-                "reward, costs, and evaluation scores should have conformable dimensions."
-            )
-        if np.any(cost <= 0):
-            raise ValueError("cost should be > 0.")
-
-        if np.isnan(reward).any() or np.isnan(DR_scores).any() or np.isnan(cost).any():
-            raise ValueError(
-                "reward, costs, and evaluation scores should have no missing values."
-            )
-
         self._path = solver_cpp(
-            np.ascontiguousarray(reward),
-            np.ascontiguousarray(DR_scores),
-            np.ascontiguousarray(cost),
+            np.ascontiguousarray(treatment_id_arrays),
+            np.ascontiguousarray(reward_arrays),
+            np.ascontiguousarray(cost_arrays),
             self.budget,
-            self.n_bootstrap,
-            self.paired_inference,
             self.n_threads,
-            self.seed,
         )
 
         self._is_fit = True
-        self._dim = reward.shape
         return self
+
+        # # ensure dims are (n, K)
+        # reward = np.reshape(reward, (reward.shape[0], -1))
+        # DR_scores = np.reshape(DR_scores, (DR_scores.shape[0], -1))
+        # # if costs are the same for each unit/arm, they can have dim (1, K)
+        # if len(np.atleast_1d(cost)) == reward.shape[1]:
+        #     cost = np.atleast_2d(cost).astype(float)
+        # else:
+        #     cost = np.reshape(cost, (np.atleast_1d(cost).shape[0], -1)).astype(float)
+
+        # if reward.shape != DR_scores.shape or cost.shape[1] != reward.shape[1]:
+        #     raise ValueError(
+        #         "reward, costs, and evaluation scores should have conformable dimensions."
+        #     )
+        # if cost.shape[0] > 1 and cost.shape[0] != reward.shape[0]:
+        #     raise ValueError(
+        #         "reward, costs, and evaluation scores should have conformable dimensions."
+        #     )
+        # if np.any(cost <= 0):
+        #     raise ValueError("cost should be > 0.")
+
+        # if np.isnan(reward).any() or np.isnan(DR_scores).any() or np.isnan(cost).any():
+        #     raise ValueError(
+        #         "reward, costs, and evaluation scores should have no missing values."
+        #     )
+
+        # self._path = solver_cpp(
+        #     np.ascontiguousarray(reward),
+        #     np.ascontiguousarray(DR_scores),
+        #     np.ascontiguousarray(cost),
+        #     self.budget,
+        #     self.n_bootstrap,
+        #     self.paired_inference,
+        #     self.n_threads,
+        #     self.seed,
+        # )
+
+        # self._is_fit = True
+        # self._dim = reward.shape
+        # return self
 
     def predict(self, spend, prediction_type="matrix"):
         """Predict the underlying treatment allocation pi_B.
