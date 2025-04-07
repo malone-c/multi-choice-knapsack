@@ -3,7 +3,7 @@
 
 #include <thread>
 
-namespace maq {
+namespace mckp {
 
 struct SolverOptions {
   SolverOptions(
@@ -25,6 +25,6 @@ struct SolverOptions {
   unsigned int num_threads;
 };
 
-} // namespace maq
+} // namespace mckp
 
 #endif // MAQ_SOLVEROPTIONS_HPP

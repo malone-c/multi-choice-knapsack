@@ -20,7 +20,7 @@ This algorithm maintains a stack with the first two points on top, then iterativ
 proceeds by checking if point k should be replaced by or augmented by point l.
 */
 
-namespace maq {
+namespace mckp {
 
 inline bool candidate_dominates_last_selection(
   const std::vector<Treatment>& selections,
@@ -42,48 +42,66 @@ inline bool candidate_dominates_last_selection(
   // return (reward_l - reward_k) / (cost_l - cost_k) > (reward_k - reward_j) / (cost_k - cost_j);
   return (candidate.reward - arm_k.reward) * (arm_k.cost - arm_j.cost) > (arm_k.reward - arm_j.reward) * (candidate.cost - arm_k.cost);
 }
-
+// TODO: Implement multithreading
 void convex_hull(std::vector<std::vector<Treatment>> treatment_arrays) {
+  
   for (size_t unit = 0; unit < treatment_arrays.size(); unit++) {
-
+    
     std::deque<Treatment> candidates(treatment_arrays[unit].begin(), treatment_arrays[unit].end());
+    
     std::vector<Treatment>& selections = treatment_arrays[unit];
     selections.clear();
-
-    std::iota(candidates.begin(), candidates.end(), 0); // fill with 0, ..., K - 1
-
-    // Get sort order by increasing cost
+    
+    // Sort by increasing cost
     std::sort(candidates.begin(), candidates.end(), [&](const Treatment lhs, const Treatment rhs) {
       return lhs.cost < rhs.cost;
     });
-
+    
     // Push first positive reward point onto stack
-    // size_t start = 0;
-    while (candidates.size() > 0 and candidates[0].reward <= 0) {
+    int removed_count = 0;
+    while (candidates.size() > 0 && candidates[0].reward <= 0) {
       candidates.pop_front();
+      removed_count++;
     }
+    
     if (candidates.size() == 0) {
       continue;
     }
-
+    
     selections.push_back(candidates[0]);
     candidates.pop_front();
-
+    
+    int iteration = 0;
     while (candidates.size() > 0) {
-      Treatment candidate = candidates[0];
-      while (candidate_dominates_last_selection(selections, candidate)) {
-        selections.pop_back(); // remove point_k
+      iteration++;
+      if (iteration % 100 == 0) {
       }
-
-      if (candidate.reward > 0) {
-        if (candidates.size() < 1 || candidate.reward > selections.back().reward) {
-          selections.push_back(candidate);
+      
+      Treatment candidate = candidates[0];
+      candidates.pop_front();
+      
+      int dominates_count = 0;
+      while (selections.size() > 0 && candidate_dominates_last_selection(selections, candidate)) {
+        selections.pop_back();
+        dominates_count++;
+        if (dominates_count > 10) {
         }
       }
+      
+      if (candidate.reward > 0) {
+        if (selections.empty() || candidate.reward > selections.back().reward) {
+          selections.push_back(candidate);
+        } else {
+        }
+      } else {
+      }
+      
     }
+    
   }
+  
 }
 
-} // namespace maq
+} // namespace mckp
 
 #endif // MAQ_CONVEX_HULL_HPP

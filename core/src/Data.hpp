@@ -4,8 +4,9 @@
 #include <cstddef>
 #include <vector>
 #include <string>
+#include <iostream>
 
-namespace maq {
+namespace mckp {
 
 struct prediction {
   std::string product_id;
@@ -38,22 +39,52 @@ std::vector<std::vector<Treatment>> process_data(
   std::vector<std::vector<double>>& reward_arrays,
   std::vector<std::vector<double>>& cost_arrays
 ) {
+  Treatment treatment;
   size_t num_units = treatment_id_arrays.size();
   std::vector<std::vector<Treatment>> treatment_arrays;
   treatment_arrays.resize(num_units);
-
   for (size_t i = 0; i < num_units; ++i) {
     size_t num_treatments = treatment_id_arrays[i].size();
+
     for (size_t j = 0; j < num_treatments; ++j) {
-      Treatment treatment = {
+  
+      treatment = {
         treatment_id_arrays[i][j],
         reward_arrays[i][j],
         cost_arrays[i][j]
       };
+      
       treatment_arrays[i].push_back(treatment);
     };
   }
   return treatment_arrays;
+}
+
+std::vector<std::vector<Treatment>> process_data_raw(
+    unsigned int** treatment_id_ptrs, 
+    size_t* treatment_id_lengths,
+    double** reward_ptrs, 
+    double** cost_ptrs,
+    size_t num_units
+) {
+    std::vector<std::vector<Treatment>> treatment_arrays;
+    treatment_arrays.resize(num_units);
+    
+    for (size_t i = 0; i < num_units; ++i) {
+        size_t num_treatments = treatment_id_lengths[i];
+        treatment_arrays[i].reserve(num_treatments);
+        
+        for (size_t j = 0; j < num_treatments; ++j) {
+            Treatment treatment = {
+                treatment_id_ptrs[i][j],
+                reward_ptrs[i][j],
+                cost_ptrs[i][j]
+            };
+            treatment_arrays[i].push_back(treatment);
+        }
+    }
+    
+    return treatment_arrays;
 }
 
 // TODO: This is not used ATM. Integrate or remove it.
@@ -80,6 +111,6 @@ private:
   std::vector<std::vector<Treatment>> treatment_arrays;
 };
 
-} // namespace maq
+} // namespace mckp
 
 #endif // MAQ_DATA_HPP

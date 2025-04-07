@@ -7,7 +7,7 @@
 #include <vector>
 #include "Data.hpp" // Include the header file where Data is defined
 
-namespace maq {
+namespace mckp {
 
 typedef std::pair<std::vector<std::vector<double>>, std::vector<std::vector<size_t>>> solution_path;
 
@@ -40,7 +40,7 @@ solution_path compute_path(
 
   // Initialize PQ with initial enrollment
   std::priority_queue<QueueElement> pqueue;
-  for (size_t unit; unit < treatment_arrays.size(); unit++) {
+  for (size_t unit = 0; unit < treatment_arrays.size(); unit++) {
     if (treatment_arrays[unit].empty()) { continue; }
 
     Treatment treatment = treatment_arrays[unit][0];
@@ -89,6 +89,6 @@ solution_path compute_path(
   return std::make_pair(std::move(spend_gain), std::move(i_k_path));
 }
 
-} // namespace maq
+} // namespace mckp
 
 #endif // MAQ_COMPUTE_PATH_HPP
