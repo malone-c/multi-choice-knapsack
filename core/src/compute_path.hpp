@@ -14,12 +14,12 @@ typedef std::pair<std::vector<std::vector<double>>, std::vector<std::vector<size
 struct QueueElement {
   QueueElement(
     size_t unit,
-    Treatment treatment,
+    const TreatmentView* treatment, 
     double priority
-  ) : unit(unit), treatment(treatment) {}
+  ) : unit(unit), treatment_ptr(treatment), priority(priority) {}  // Fix: initialize treatment_ptr correctly
 
   size_t unit;
-  Treatment treatment;
+  const TreatmentView* treatment_ptr;  // Store const pointer instead of copy
   double priority;
 };
 
@@ -28,14 +28,15 @@ bool operator <(const QueueElement& lhs, const QueueElement& rhs) {
 }
 
 solution_path compute_path(
-  const std::vector<std::vector<Treatment>>& treatment_arrays,
+  const std::vector<std::vector<TreatmentView>>& treatment_arrays,
   double budget
 ) {
+  std::cout << "Computing path..." << std::endl;
   std::vector<std::vector<double>> spend_gain(3); // 3rd entry: SEs
   std::vector<std::vector<size_t>> i_k_path(3); // 3rd entry: complete path
   std::vector<size_t> active_arm_indices(treatment_arrays.size(), 0); // active treatment entry offset by one
 
-  // TODO: No point having DNS in the treatment arrays since reward = cost = 0. active_arm_indices[unit] = 0 -> DNS
+  // TODO: No point having DNS in the treatment arrays since.get_reward() =.get_cost() = 0. active_arm_indices[unit] = 0 -> DNS
   // TODO: Initialise vector with some treatment (might be DNS or some offer). This lets us force all units to get a treatment.
 
   // Initialize PQ with initial enrollment
@@ -43,9 +44,9 @@ solution_path compute_path(
   for (size_t unit = 0; unit < treatment_arrays.size(); unit++) {
     if (treatment_arrays[unit].empty()) { continue; }
 
-    Treatment treatment = treatment_arrays[unit][0];
-    double priority = treatment.reward / treatment.cost;
-    pqueue.emplace(unit, treatment, priority);
+    const TreatmentView& treatment_ref = treatment_arrays[unit][0];
+    double priority = treatment_ref.get_reward() / treatment_ref.get_cost();
+    pqueue.emplace(unit, &treatment_ref, priority);
   }
 
   double spend = 0;
@@ -56,25 +57,26 @@ solution_path compute_path(
 
     if (active_arm_indices[top.unit] > 0) { // If assigned before...
       size_t active_arm_index = active_arm_indices[top.unit] - 1;
-      Treatment active_arm = treatment_arrays[top.unit][active_arm_index];
-      spend -= active_arm.cost;
-      gain -= active_arm.reward;
+      TreatmentView active_arm = treatment_arrays[top.unit][active_arm_index];
+      spend -= active_arm.get_cost();
+      gain -= active_arm.get_reward();
     }
 
     // assign
-    spend += top.treatment.cost;
-    gain += top.treatment.reward;
+    spend += top.treatment_ptr->get_cost();
+    gain += top.treatment_ptr->get_reward();
     spend_gain[0].push_back(spend);
     spend_gain[1].push_back(gain);
     i_k_path[0].push_back(top.unit);
-    i_k_path[1].push_back(top.treatment.id);
+    i_k_path[1].push_back(top.treatment_ptr->get_id());
     active_arm_indices[top.unit]++;
 
     size_t next_entry = active_arm_indices[top.unit];
     if (treatment_arrays[top.unit].size() > next_entry) { // More treatments available for this unit?
-      Treatment upgrade = treatment_arrays[top.unit][next_entry];
-      double priority = (upgrade.reward - top.treatment.reward) / (upgrade.cost - top.treatment.cost);
-      pqueue.emplace(top.unit, upgrade, priority);
+      // To this:
+      const TreatmentView& upgrade_ref = treatment_arrays[top.unit][next_entry];
+      double priority = (upgrade_ref.get_reward() - top.treatment_ptr->get_reward()) / (upgrade_ref.get_cost() - top.treatment_ptr->get_cost());
+      pqueue.emplace(top.unit, &upgrade_ref, priority);
     }
 
     // have we reached maximum spend? if so stop at nearest integer solution (rounded up)

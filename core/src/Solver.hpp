@@ -19,7 +19,7 @@ namespace mckp {
 class Solver {
   public:
     Solver(
-      std::vector<std::vector<Treatment>>& treatment_arrays,
+      std::vector<std::vector<TreatmentView>>& treatment_arrays,
       const SolverOptions& options
     ) : 
       treatment_arrays(treatment_arrays),
@@ -31,7 +31,7 @@ class Solver {
     }
 
     // TODO: Write a method to support predictions
-    std::vector<std::vector<Treatment>> treatment_arrays;
+    std::vector<std::vector<TreatmentView>> treatment_arrays;
     SolverOptions options;
 };
 
