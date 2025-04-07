@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 from setuptools import setup, find_packages
@@ -9,17 +10,17 @@ import numpy as np
 import pyarrow as pa
 arrow_lib_dir = pa.get_library_dirs()[0]
 
-# if "darwin" in sys.platform:
-#     COMPILE_ARGS = ["-std=c++20", "-O2", "-pthread"]
-#     LINK_ARGS = ["-stdlib=libc++"]
-# elif "linux" in sys.platform:
-#     COMPILE_ARGS = ["-std=c++11", "-lstdc++", "-Wall", "-O2", "-pthread"]
-#     LINK_ARGS = ["-lstdc++", "-pthread"]
-# elif "win32" in sys.platform:
-#     COMPILE_ARGS = ["-Wall", "-O2"]
-#     LINK_ARGS = []
-# else:
-#     raise ImportError("Unknown OS.")
+if "darwin" in sys.platform:
+    COMPILE_ARGS = ["-std=c++20", "-O2", "-pthread"]
+    LINK_ARGS = ["-stdlib=libc++"]
+elif "linux" in sys.platform:
+    COMPILE_ARGS = ["-std=c++20", "-lstdc++", "-Wall", "-O2", "-pthread"]
+    LINK_ARGS = ["-lstdc++", "-pthread"]
+elif "win32" in sys.platform:
+    COMPILE_ARGS = ["-Wall", "-O2"]
+    LINK_ARGS = []
+else:
+    raise ImportError("Unknown OS.")
 
 setup_dir = Path(os.path.abspath(os.path.dirname(__file__)))
 core_dir = setup_dir / '..' / 'core' / 'src'
@@ -29,8 +30,8 @@ ext = Extension(
     "mckp.ext",
     language="c++",
     sources=["mckp" + os.path.sep + "mckpbindings.pyx"],
-    extra_compile_args=["-std=c++20", "-Wno-unused-variable"],
-    # extra_link_args=["-stdlib=libc++"],
+    extra_compile_args=COMPILE_ARGS,
+    extra_link_args=LINK_ARGS,
     include_dirs=[str(core_dir), pa.get_include(), np.get_include()],
     library_dirs=[arrow_lib_dir],
     define_macros=[("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")],
@@ -38,7 +39,7 @@ ext = Extension(
 
 setup(
     name="mckp",
-    version="0.2.2",
+    version="0.1",
     packages=find_packages(include=["mckp"]),
     ext_modules=cythonize(ext, compiler_directives={"language_level": 3}),
     # TODO: Add SPDX license expression
