@@ -23,7 +23,7 @@ else:
     raise ImportError("Unknown OS.")
 
 setup_dir = Path(os.path.abspath(os.path.dirname(__file__)))
-core_dir = setup_dir / '..' / 'core' / 'src'
+core_dir = setup_dir / 'core' / 'src'
 
 # INCLUDE_DIRS = [os.path.join(setup_dir, "..", "core", "src")]
 ext = Extension(
