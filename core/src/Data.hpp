@@ -8,27 +8,6 @@
 
 namespace mckp {
 
-struct prediction {
-  std::string product_id;
-  double cost;
-  double reward;
-};
-
-/**
- * Read-only data wrapper.
- *
- * Costs should be > 0
- * Weights should be > 0 and sum to 1
- * Clusters, if present, should be labeled as consecutive integers 0, ..., num_clusters
- *
- */
-
-// struct TreatmentView {
-//   unsigned int id;
-//   double reward;
-//   double cost;
-// };
-
 class TreatmentView {
   public:
     TreatmentView(unsigned int& id, double& reward, double& cost) 
