@@ -26,10 +26,6 @@ inline bool candidate_dominates_last_selection(
   const std::vector<TreatmentView>& selections,
   TreatmentView candidate
 ) {
-  if (selections.size() < 1) {
-    return false;
-  }
-
   unsigned int zero_id_value = 0;
   double zero_reward_value = 0.0;
   double zero_cost_value = 0.0;
@@ -48,10 +44,11 @@ inline bool candidate_dominates_last_selection(
   return (candidate.get_reward() - arm_k.get_reward()) * (arm_k.get_cost() - arm_j.get_cost()) > (arm_k.get_reward() - arm_j.get_reward()) * (candidate.get_cost() - arm_k.get_cost());
 }
 // TODO: Implement multithreading
-void convex_hull(std::vector<std::vector<TreatmentView>> treatment_arrays) {
+void convex_hull(std::vector<std::vector<TreatmentView>>& treatment_arrays) {
   
   for (size_t unit = 0; unit < treatment_arrays.size(); unit++) {
     
+    // Copy all the treatments to a queue and clear the original vector
     std::deque<TreatmentView> candidates(treatment_arrays[unit].begin(), treatment_arrays[unit].end());
     
     std::vector<TreatmentView>& selections = treatment_arrays[unit];
@@ -63,10 +60,8 @@ void convex_hull(std::vector<std::vector<TreatmentView>> treatment_arrays) {
     });
     
     // Push first positive reward point onto stack
-    int removed_count = 0;
     while (candidates.size() > 0 && candidates[0].get_reward() <= 0) {
       candidates.pop_front();
-      removed_count++;
     }
     
     if (candidates.size() == 0) {
@@ -76,35 +71,21 @@ void convex_hull(std::vector<std::vector<TreatmentView>> treatment_arrays) {
     selections.push_back(candidates[0]);
     candidates.pop_front();
     
-    int iteration = 0;
     while (candidates.size() > 0) {
-      iteration++;
-      if (iteration % 100 == 0) {
-      }
-      
       TreatmentView candidate = candidates[0];
       candidates.pop_front();
       
-      int dominates_count = 0;
       while (selections.size() > 0 && candidate_dominates_last_selection(selections, candidate)) {
         selections.pop_back();
-        dominates_count++;
-        if (dominates_count > 10) {
-        }
       }
       
       if (candidate.get_reward() > 0) {
         if (selections.empty() || candidate.get_reward() > selections.back().get_reward()) {
           selections.push_back(candidate);
-        } else {
         }
-      } else {
       }
-      
     }
-    
   }
-  
 }
 
 } // namespace mckp
