@@ -29,11 +29,11 @@ solution_path run(
   std::cout << "Data successfully pre-processed" << std::endl;
 
   std::cout << "Initializing solver" << std::endl;
-  Solver maq(treatment_arrays, options);
+  Solver solver(treatment_arrays, options);
   std::cout << "Solver initialized" << std::endl;
 
   std::cout << "Fitting solver" << std::endl;
-  return maq.fit();
+  return solver.fit();
 }
 
 } // namespace mckp
