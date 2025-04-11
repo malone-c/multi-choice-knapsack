@@ -1,4 +1,4 @@
-# import numpy as np
+import numpy as np
 import pyarrow as pa
 
 from .ext import solver_cpp
