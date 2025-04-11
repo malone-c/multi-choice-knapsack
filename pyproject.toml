@@ -1,3 +1,16 @@
+[tool.poetry]
+name = "mckp"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pyarrow = "^19.0.1"
+cython = "^3.0.12"
+numpy = "^2.2.4"
+
 [build-system]
 requires = [
     "setuptools",
