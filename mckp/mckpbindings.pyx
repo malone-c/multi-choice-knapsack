@@ -69,14 +69,12 @@ cpdef solver_cpp(
 
     spend = np.empty(path_len, dtype="double")
     gain = np.empty(path_len, dtype="double")
-    std_err = np.empty(path_len, dtype="double")
     ipath = np.empty(path_len, dtype="long")
     kpath = np.empty(path_len, dtype="long")
 
     # faster copy into nparrays with memoryviews
     cdef double[::] view_spend = spend
     cdef double[::] view_gain = gain
-    cdef double[::] view_std_err = std_err
     cdef long[::] view_ipath = ipath
     cdef long[::] view_kpath = kpath
 
@@ -88,7 +86,6 @@ cpdef solver_cpp(
 
     res["spend"] = spend
     res["gain"] = gain
-    res["std_err"] = std_err
     res["ipath"] = ipath
     res["kpath"] = kpath
     if path.second[2][0] > 0:
