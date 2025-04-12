@@ -36,8 +36,7 @@ solution_path compute_path(
   std::vector<std::vector<size_t>> i_k_path(3); // 3rd entry: complete path
   std::vector<size_t> active_arm_indices(treatment_arrays.size(), 0); // active treatment entry offset by one
 
-  // TODO: No point having DNS in the treatment arrays since.get_reward() =.get_cost() = 0. active_arm_indices[unit] = 0 -> DNS
-  // TODO: Initialise vector with some treatment (might be DNS or some offer). This lets us force all units to get a treatment.
+  // TODO: Initialise vector with some treatment (could be null treatment). This lets us force all units to get a treatment.
 
   // Initialize PQ with initial enrollment
   std::priority_queue<QueueElement> pqueue;

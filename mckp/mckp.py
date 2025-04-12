@@ -10,7 +10,7 @@ class Solver:
         self.path = None
         self._is_fit = False
         self.budget = None
-        # TODO: Manage offer ID <-> int mapping here
+        # TODO: Manage treatment ID <-> int mapping here
         # TODO: Manage patient ID <-> int mapping here
 
     def solve(
@@ -34,7 +34,7 @@ class Solver:
         assert 'reward' in table.column_names, "table must contain a reward column."
         assert 'cost' in table.column_names, "table must contain a cost column."
 
-        treatment_id_arrays = table.column("offer_id").cast(pa.list_(pa.uint32())).combine_chunks()
+        treatment_id_arrays = table.column("treatment_id").cast(pa.list_(pa.uint32())).combine_chunks()
         reward_arrays = table.column("reward").cast(pa.list_(pa.float64())).combine_chunks()
         cost_arrays = table.column("cost").cast(pa.list_(pa.float64())).combine_chunks()
 
