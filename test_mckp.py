@@ -10,7 +10,7 @@ import mckp
 
 # Create test data with more customers and smaller numbers
 offer_ids = pa.array([
-    [0, 1, 2], 
+    [0, 1, 2, 3], 
     [0, 1, 2], 
     [0, 1, 2], 
     [0, 1, 2], 
@@ -18,7 +18,7 @@ offer_ids = pa.array([
 ], type=pa.list_(pa.uint32()))
 
 rewards = pa.array([
-    [0, 15, 22], 
+    [0, 15, 22, 30], 
     [0, 18, 32], 
     [0, 10, 19], 
     [0, 17, 28], 
@@ -26,7 +26,7 @@ rewards = pa.array([
 ], type=pa.list_(pa.float64()))
 
 costs = pa.array([
-    [0, 10, 20], 
+    [0, 10, 20, 21], 
     [0, 15, 25], 
     [0, 8, 16], 
     [0, 12, 22], 
