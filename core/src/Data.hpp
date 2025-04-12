@@ -10,21 +10,21 @@ namespace mckp {
 
 class TreatmentView {
   public:
-    TreatmentView(unsigned int& id, double& reward, double& cost) 
+    TreatmentView(uint32_t& id, double& reward, double& cost) 
       : id_ptr(&id), reward_ptr(&reward), cost_ptr(&cost) {}
 
-    unsigned int get_id() const { return *id_ptr; }
+    uint32_t get_id() const { return *id_ptr; }
     double get_reward() const { return *reward_ptr; }
     double get_cost() const { return *cost_ptr; }
 
   private:
-    unsigned int* id_ptr;
+    uint32_t* id_ptr;
     double* reward_ptr;
     double* cost_ptr;
 };
 
 std::vector<std::vector<TreatmentView>> process_data(
-  std::vector<std::vector<unsigned int>>& treatment_id_arrays,
+  std::vector<std::vector<uint32_t>>& treatment_id_arrays,
   std::vector<std::vector<double>>& reward_arrays,
   std::vector<std::vector<double>>& cost_arrays
 ) {
@@ -52,7 +52,7 @@ std::vector<std::vector<TreatmentView>> process_data(
 }
 
 // std::vector<std::vector<TreatmentView>> process_data_raw(
-//     unsigned int** treatment_id_ptrs, 
+//     uint32_t** treatment_id_ptrs, 
 //     size_t* treatment_id_lengths,
 //     double** reward_ptrs, 
 //     double** cost_ptrs,
@@ -82,7 +82,7 @@ std::vector<std::vector<TreatmentView>> process_data(
 // class Data {
 // public:
 //   Data(
-//     std::vector<std::vector<unsigned int>>& treatment_id_arrays,
+//     std::vector<std::vector<uint32_t>>& treatment_id_arrays,
 //     std::vector<std::vector<double>>& reward_arrays,
 //     std::vector<std::vector<double>>& cost_arrays
 //   ) {

@@ -8,7 +8,7 @@ namespace mckp {
 struct SolverOptions {
   SolverOptions(
     double budget,
-    unsigned int num_threads
+    uint32_t num_threads
   ):
       budget(budget)
       // paired_inference(paired_inference),
@@ -22,7 +22,7 @@ struct SolverOptions {
   }
 
   double budget;
-  unsigned int num_threads;
+  uint32_t num_threads;
 };
 
 } // namespace mckp

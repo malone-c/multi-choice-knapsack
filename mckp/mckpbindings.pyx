@@ -1,7 +1,7 @@
 import cython
 from libcpp cimport bool
 from libcpp.vector cimport vector
-# from libc.stdint cimport uint32_t
+from libc.stdint cimport uint32_t
 from libcpp.memory cimport shared_ptr, static_pointer_cast
 from pyarrow.lib cimport ListArray, CArray, CUInt32Array, CDoubleArray, CListArray, pyarrow_unwrap_array
 import numpy as np
@@ -14,7 +14,7 @@ cpdef solver_cpp(
     ListArray reward_lists,
     ListArray cost_lists,
     double budget,
-    unsigned int num_threads
+    uint32_t num_threads
 ):
     # Unwrap arrays and cast to list arrays in one step
     cdef shared_ptr[CArray] treatment_id_array = pyarrow_unwrap_array(treatment_id_lists)
@@ -30,7 +30,7 @@ cpdef solver_cpp(
     cdef shared_ptr[CDoubleArray] rewards = static_pointer_cast[CDoubleArray, CArray](reward_list_array.get().values())
     cdef shared_ptr[CDoubleArray] costs = static_pointer_cast[CDoubleArray, CArray](cost_list_array.get().values())
 
-    cdef vector[vector[unsigned int]] cpp_treatment_ids
+    cdef vector[vector[uint32_t]] cpp_treatment_ids
     cdef vector[vector[double]] cpp_rewards
     cdef vector[vector[double]] cpp_costs
 
@@ -39,7 +39,7 @@ cpdef solver_cpp(
     cpp_costs.resize(cost_list_array.get().length())
 
     cdef int i, j, offset, length
-    cdef unsigned int treatment_id
+    cdef uint32_t treatment_id
 
     for i in range(treatment_id_list_array.get().length()):
         offset = treatment_id_list_array.get().value_offset(i) # start

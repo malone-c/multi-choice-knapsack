@@ -26,7 +26,7 @@ inline bool candidate_dominates_last_selection(
   const std::vector<TreatmentView>& selections,
   TreatmentView candidate
 ) {
-  unsigned int zero_id_value = 0;
+  uint32_t zero_id_value = 0;
   double zero_reward_value = 0.0;
   double zero_cost_value = 0.0;
   TreatmentView arm_j = TreatmentView(zero_id_value, zero_reward_value, zero_cost_value); // dummy point

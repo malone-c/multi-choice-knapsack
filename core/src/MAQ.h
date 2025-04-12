@@ -12,11 +12,11 @@
 namespace mckp {
 
 solution_path run(
-  std::vector<std::vector<unsigned int>>& treatment_id_arrays,
+  std::vector<std::vector<uint32_t>>& treatment_id_arrays,
   std::vector<std::vector<double>>& reward_arrays,
   std::vector<std::vector<double>>& cost_arrays,
   double budget,
-  unsigned int num_threads
+  uint32_t num_threads
 ) {
   SolverOptions options(budget, num_threads);
 
