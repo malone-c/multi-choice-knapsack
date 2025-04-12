@@ -1,272 +1,53 @@
 import numpy as np
 import pyarrow as pa
+import polars as pl
+from typing import cast
 
 from .ext import solver_cpp
 
-def solve(
-    treatment_id_arrays: pa.ListArray, 
-    reward_arrays: pa.ListArray,
-    cost_arrays: pa.ListArray,
-    budget: float = None,
-    n_threads: int = 0,
-):
-    return solver_cpp(
-        treatment_id_arrays,
-        reward_arrays,
-        cost_arrays,
-        budget,
-        n_threads,
-    )
+class Solver:
+    def __init__(self):
+        self.path = None
+        self._is_fit = False
+        self.budget = None
+        # TODO: Manage offer ID <-> int mapping here
+        # TODO: Manage patient ID <-> int mapping here
 
-
-def get_ipw_scores(Y, W, W_hat=None):
-    """Construct evaluation scores for multi-armed Qini curves via inverse-propensity weighting.
-
-    Parameters
-    ----------
-    Y : ndarray
-        A vector of test set outcomes.
-
-    W : ndarray
-        A vector of test set treatment assignments encoded as integers 0,...,K where
-        k=0 is the control arm and k=1,..,K one of K treatment arms.
-
-    W_hat : ndarray, default=None
-        Optional num_samples * (K + 1) array of treatment propensities where the k-th column
-        contains the propensity scores for the k-th arm. If None (Default), then the assignment
-        probabilities are assumed to be uniform and the same for each arm.
-
-    Returns
-    -------
-    ndarray
-        An (num_samples * K) array of scores.
-
-    Examples
-    --------
-    Generate some synthetic data from K=2 treatment arms with equal assignment probabilities.
-
-    >>> import numpy as np
-    >>> np.random.seed(42)
-    >>> n = 2000
-    >>> W = np.random.choice([0, 1, 2], n)
-    >>> Y = 42 * (W == 1) - 42 * (W == 2) + np.random.rand(n)
-    >>> IPW_scores = get_ipw_scores(Y, W)
-
-    An IPW estimate of E[Y(1) - Y(0)] and E[Y(2) - Y(0)] ~ 42 and -42.
-
-    >>> IPW_scores.mean(axis=0)
-    array([ 41.51013928, -41.09905001])
-
-    Draw non-uniformly from the different arms.
-
-    >>> p = np.array([0.2, 0.2, 0.6])
-    >>> W = np.random.choice([0, 1, 2], n, p = p)
-    >>> Y = 42 * (W == 1) - 42 * (W == 2) + np.random.rand(n)
-    >>> # Construct a matrix of treatment assignment probabilities.
-    >>> W_hat = np.repeat(p[None,:], n, axis=0)
-    >>> IPW_scores = get_ipw_scores(Y, W, W_hat)
-    >>> IPW_scores.mean(axis=0)
-    array([ 43.06614088, -41.60718507])
-    """
-    if Y.ndim > 1 and Y.shape != W.shape:
-        raise ValueError("Y and W should be equal length vectors.")
-    K = max(W)
-    if (
-        not isinstance(K, np.integer)
-        or K <= 0
-        or not np.array_equal(np.unique(W), np.array(range(K + 1)))
-    ):
-        raise ValueError("W should be a vector of integers (0, 1, ..., K).")
-
-    if W_hat is None:
-        W_hat = 1.0 / (K + 1)
-    elif W_hat.shape != (len(W), K + 1):
-        raise ValueError("W_hat should be a matrix of propensities.")
-    elif (
-        np.any(W_hat <= 0)
-        or np.any(W_hat >= 1)
-        or np.any(abs(W_hat.sum(axis=1) - 1) > 1e-6)
-    ):
-        raise ValueError("W_hat entries should be in (0, 1) and sum to 1.")
-
-    Y_mat = np.zeros((len(W), K + 1))
-    Y_mat[range(len(W)), W] = Y
-    Y_ipw = Y_mat / W_hat
-
-    return Y_ipw[:, 1:] - Y_ipw[:, 0][:, None]
-
-
-class MAQ:
-    """Fit a Qini curve for costly multi-armed treatments.
-
-    Given a test sample of treatment effect estimates tau for K treatment arms with known and varying costs,
-    fit a Qini curve Q(B) that quantifies the expected gain when assigning treatment in accordance with
-    these estimates while satisfying a budget constraint requiring the average incurred cost to be equal
-    to at most B.
-
-    The treatment allocation policies underlying the multi-armed Qini curve (which unit to assign which arm
-    at every budget constraint) is a solution to a series of linear programs.
-    For complete details see the reference at https://arxiv.org/abs/2306.11979.
-
-    Parameters
-    ----------
-    budget : scalar, default=None
-        The maximum spend per unit to fit the Qini curve on.
-        Setting this to None (Default), will fit the path up to a maximum spend per unit
-        where each unit that is expected to benefit is treated (that is, hat tau_k(X_i) > 0).
-
-    n_bootstrap : int, default=0
-        Number of bootstrap replicates for SEs. Default is 0 (only point estimates are computed).
-
-    paired_inference : bool, default=True
-        Whether to allow for paired tests with other Qini curves fit on the same evaluation data.
-        If TRUE (Default) then the path of bootstrap replicates are stored in order to perform
-        paired comparisons that account for the correlation between curves evaluated on the same data.
-        This takes memory on the order of O(n_bootstrap*num_samples*K) and requires the comparison
-        objects to be fit with the same seed and n_bootstrap values as well as the same number of samples.
-
-    n_threads : int, default=0
-        Number of threads used in bootstrap replicates. Default is the maximum hardware concurrency.
-
-    seed : int, default=42
-        The seed of the C++ random number generator. Default is 42.
-
-    Attributes
-    ----------
-    path_spend_ : ndarray
-        Fit spend path.
-    path_gain_ : ndarray
-        Fit gain path.
-    path_std_err_ : ndarray
-        Fit gain path std.err.
-    path_allocated_unit_ : ndarray
-        The unit allocated in spend path.
-    path_allocated_arm_ : ndarray
-        The arm allocated in spend path.
-
-    Examples
-    --------
-    >>> import numpy as np
-    >>> from maq import MAQ
-
-    Fit a Qini curve on toy data.
-
-    >>> np.random.seed(42)
-    >>> n = 1000
-    >>> K = 5
-    >>> tau_hat = np.random.randn(n, K)
-    >>> cost = np.random.rand(n, K)
-
-    Evaluation scores
-
-    >>> DR_scores = np.random.randn(n, K)
-
-    >>> mq = MAQ(n_bootstrap=200)
-    >>> mq.fit(tau_hat, cost, DR_scores)
-    MAQ object with 1000 units and 5 arms.
-
-    Get an estimate of gain at a given spend along with standard errors.
-
-    >>> mq.average_gain(spend=0.1)
-    (np.float64(0.005729002695991717), np.float64(0.019814651108894354))
-
-    Get the underlying treatment allocation matrix at a given spend, a n x K array.
-
-    >>> mq.predict(spend=0.1)
-    array([[0., 0., 0., 1., 0.],
-           [0., 0., 0., 0., 1.],
-           [0., 0., 0., 0., 0.],
-           ...,
-           [0., 0., 0., 0., 1.],
-           [0., 0., 0., 1., 0.],
-           [0., 0., 1., 0., 0.]])
-
-    Plot the Qini curve along with 95% confidence bars (requires matplotlib).
-
-    >>> mq.plot() # doctest: +SKIP
-    """
-
-    def __init__(
+    def solve(
         self,
-        budget=None,
-        n_threads=0,
+        data: pl.DataFrame,
+        budget: np.float64 = np.finfo(np.float64).max,
+        n_threads: int = 0,
     ):
-        if budget is None:
-            budget = np.finfo(np.float64).max
+        """Solve the multi-armed knapsack problem using a path algorithm."""
+        # TODO: Data validation
+            # Check typing of columns (list types)
+            # Check inner arrays have consistent lengths across outer arrays
+                # e.g. all(len(treatment_id_arrays[i]) == len(reward_arrays[i]) == len(cost_arrays[i]) for i in range(len(treatment_id_arrays)))
+            # Check for nans/nulls
         assert np.isscalar(budget), "budget should be a scalar."
         assert n_threads >= 0, "n_threads should be >=0."
-        self.budget = budget
-        self.n_threads = n_threads
-        self._is_fit = False
 
-    def fit(self, treatment_id_arrays, reward_arrays, cost_arrays):
-        """Fit a Qini curve.
+        table: pa.Table = pl.DataFrame(data).to_arrow()
+        
+        assert 'treatment_id' in table.column_names, "table must contain a treatment_id column."
+        assert 'reward' in table.column_names, "table must contain a reward column."
+        assert 'cost' in table.column_names, "table must contain a cost column."
 
-        Parameters
-        ----------
-        reward : ndarray
-            A matrix of reward estimates with rows corresponding to units and columns containing
-            the treatment effect estimates tau for the K different arms.
+        treatment_id_arrays = table.column("offer_id").cast(pa.list_(pa.uint32())).combine_chunks()
+        reward_arrays = table.column("reward").cast(pa.list_(pa.float64())).combine_chunks()
+        cost_arrays = table.column("cost").cast(pa.list_(pa.float64())).combine_chunks()
 
-        cost : ndarray
-            A matrix of costs measuring the cost of assigning an arm k to unit i.
-            If the costs only vary by arm and not by unit, then this
-            can also be a K-vector of costs for each arm.
-
-        DR_scores : ndarray
-            A matrix of evaluation scores to estimate the Qini curve with.
-        """
-        self._path = solver_cpp(
-            np.ascontiguousarray(treatment_id_arrays),
-            np.ascontiguousarray(reward_arrays),
-            np.ascontiguousarray(cost_arrays),
+        self.path = solver_cpp(
+            treatment_id_arrays,
+            reward_arrays,
+            cost_arrays,
             self.budget,
-            self.n_threads,
+            n_threads,
         )
+        return self.path
 
-        self._is_fit = True
-        return self
-
-        # # ensure dims are (n, K)
-        # reward = np.reshape(reward, (reward.shape[0], -1))
-        # DR_scores = np.reshape(DR_scores, (DR_scores.shape[0], -1))
-        # # if costs are the same for each unit/arm, they can have dim (1, K)
-        # if len(np.atleast_1d(cost)) == reward.shape[1]:
-        #     cost = np.atleast_2d(cost).astype(float)
-        # else:
-        #     cost = np.reshape(cost, (np.atleast_1d(cost).shape[0], -1)).astype(float)
-
-        # if reward.shape != DR_scores.shape or cost.shape[1] != reward.shape[1]:
-        #     raise ValueError(
-        #         "reward, costs, and evaluation scores should have conformable dimensions."
-        #     )
-        # if cost.shape[0] > 1 and cost.shape[0] != reward.shape[0]:
-        #     raise ValueError(
-        #         "reward, costs, and evaluation scores should have conformable dimensions."
-        #     )
-        # if np.any(cost <= 0):
-        #     raise ValueError("cost should be > 0.")
-
-        # if np.isnan(reward).any() or np.isnan(DR_scores).any() or np.isnan(cost).any():
-        #     raise ValueError(
-        #         "reward, costs, and evaluation scores should have no missing values."
-        #     )
-
-        # self._path = solver_cpp(
-        #     np.ascontiguousarray(reward),
-        #     np.ascontiguousarray(DR_scores),
-        #     np.ascontiguousarray(cost),
-        #     self.budget,
-        #     self.n_bootstrap,
-        #     self.paired_inference,
-        #     self.n_threads,
-        #     self.seed,
-        # )
-
-        # self._is_fit = True
-        # self._dim = reward.shape
-        # return self
-
+    # TODO
     def predict(self, spend, prediction_type="matrix"):
         """Predict the underlying treatment allocation pi_B.
 
@@ -294,21 +75,19 @@ class MAQ:
         """
 
         assert np.isscalar(spend), "spend should be a scalar."
-        self._ensure_fit()
+        assert self._is_fit, "Solver object is not fit."
         if not self._path["complete_path"] and spend > self.budget:
             raise ValueError("maq path is not fit beyond given spend level.")
 
         # Binary search to get the point in the path when we hit this budget
-        spend_grid = self._path["spend"]
-        path_idx = np.searchsorted(spend_grid, spend, side="right") - 1
+        spend_path = self._path["spend"]
+        path_idx = np.searchsorted(spend_path, spend, side="right") - 1
         if path_idx < 0:
-            if prediction_type == "matrix":
-                return np.zeros(self._dim, dtype="double")
-            else:
-                return np.zeros(self._dim[0], dtype="int")
+            return np.zeros(self._dim[0], dtype="int")
 
         ipath = self._path["ipath"][: path_idx + 1]
         kpath = self._path["kpath"][: path_idx + 1]
+        
         # Get indices of first instances of unique units in reverse order (last time the treatment was set for each unit)
         ix = np.unique(ipath[::-1], return_index=True)[1]
 
@@ -320,222 +99,25 @@ class MAQ:
         pi_mat = np.zeros(self._dim, dtype="double")
         pi_mat[ipath[::-1][ix], kpath[::-1][ix]] = 1
 
-        if path_idx == spend_grid.shape[0] - 1:
+        if path_idx == spend_path.shape[0] - 1:
             return pi_mat
 
         # fractional adjustment?
-        spend_diff = spend - spend_grid[path_idx]
+        spend_diff = spend - spend_path[path_idx]
         next_unit = self._path["ipath"][path_idx + 1]
         next_arm = self._path["kpath"][path_idx + 1]
         prev_arm = np.nonzero(pi_mat[next_unit,])[0]  # already assigned?
 
-        fraction = spend_diff / (spend_grid[path_idx + 1] - spend_grid[path_idx])
+        fraction = spend_diff / (spend_path[path_idx + 1] - spend_path[path_idx])
         pi_mat[next_unit, next_arm] = fraction
         if prev_arm.shape[0] > 0:
             pi_mat[next_unit, prev_arm[0]] = 1 - fraction
 
         return pi_mat
 
-    def average_gain(self, spend):
-        """Get estimate of gain Q(B) at a spend level B.
 
-        Parameters
-        ----------
-        spend : scalar
-            The spend level.
 
-        Returns
-        -------
-        estimate, std_error : tuple
-            Estimate of gain Q(B) along with standard errors.
-        """
-
-        assert np.isscalar(spend), "spend should be a scalar."
-        self._ensure_fit()
-        if not self._path["complete_path"] and spend > self.budget:
-            raise ValueError("maq path is not fit beyond given spend level.")
-
-        spend_grid = self._path["spend"]
-        path_idx = np.searchsorted(spend_grid, spend, side="right") - 1
-
-        gain_path = self._path["gain"]
-        se_path = self._path["std_err"]
-        if path_idx < 0:
-            estimate = 0
-            std_err = 0
-        elif path_idx == spend_grid.shape[0] - 1:
-            estimate = gain_path[path_idx]
-            std_err = se_path[path_idx]
-        else:
-            interp_ratio = (spend - spend_grid[path_idx]) / (
-                spend_grid[path_idx + 1] - spend_grid[path_idx]
-            )
-            estimate = (
-                gain_path[path_idx]
-                + (gain_path[path_idx + 1] - gain_path[path_idx]) * interp_ratio
-            )
-            std_err = (
-                se_path[path_idx]
-                + (se_path[path_idx + 1] - se_path[path_idx]) * interp_ratio
-            )
-
-        return estimate, std_err
-
-    def difference_gain(self, other, spend):
-        """Get estimate of difference in gain given a spend level with paired standard errors.
-
-        Parameters
-        ----------
-        other : MAQ object.
-            The other Qini curve to subtract with.
-
-        spend : scalar
-            The spend level B.
-
-        Returns
-        -------
-        estimate, std_error : tuple
-            Estimate of difference in gain along with standard errors.
-        """
-        assert np.isscalar(spend), "spend should be a scalar."
-        self._ensure_fit()
-        if not self._path["complete_path"] and spend > self.budget:
-            raise ValueError("maq path is not fit beyond given spend level.")
-        other._ensure_fit()
-        if not other._path["complete_path"] and spend > other.budget:
-            raise ValueError("comparison maq path is not fit beyond given spend level.")
-        if (
-            self.seed != other.seed
-            or self.n_bootstrap != other.n_bootstrap
-            or self._dim[0] != other._dim[0]
-            or not self.paired_inference
-            or not other.paired_inference
-        ):
-            raise ValueError(
-                """Paired comparisons require maq objects to be fit with paired_inference=True
-                as well as with the same random seed, bootstrap replicates, and data."""
-            )
-        point_estimate = self.average_gain(spend)[0] - other.average_gain(spend)[0]
-        if self.n_bootstrap < 2:
-            return point_estimate, 0
-
-        # Compute paired std.errors
-        def _get_estimates(obj):
-            gain_bs = obj._path["gain_bs"]
-            spend_grid = obj._path["spend"]
-            path_idx = np.searchsorted(spend_grid, spend, side="right") - 1
-            if path_idx < 0:
-                estimates = 0
-            elif path_idx == spend_grid.shape[0] - 1:
-                estimates = gain_bs[:, path_idx]
-            else:
-                interp_ratio = (spend - spend_grid[path_idx]) / (
-                    spend_grid[path_idx + 1] - spend_grid[path_idx]
-                )
-                estimates = (
-                    gain_bs[:, path_idx]
-                    + (gain_bs[:, path_idx + 1] - gain_bs[:, path_idx]) * interp_ratio
-                )
-            return estimates
-
-        estimates_lhs = _get_estimates(self)
-        estimates_rhs = _get_estimates(other)
-        std_err = np.nanstd(estimates_lhs - estimates_rhs)
-        if np.isnan(std_err):
-            std_err = 0
-
-        return point_estimate, std_err
-
-    def integrated_difference(self, other, spend):
-        """Get estimate of the area between two Qini curves with paired standard errors.
-
-        Parameters
-        ----------
-        other : MAQ object.
-            The other Qini curve to subtract with.
-
-        spend : scalar
-            The spend level B.
-
-        Returns
-        -------
-        estimate, std_error : tuple
-            An estimate of the area between the two curves along with standard errors.
-        """
-        assert np.isscalar(spend), "spend should be a scalar."
-        self._ensure_fit()
-        if not self._path["complete_path"] and spend > self.budget:
-            raise ValueError("maq path is not fit beyond given spend level.")
-        other._ensure_fit()
-        if not other._path["complete_path"] and spend > other.budget:
-            raise ValueError("comparison maq path is not fit beyond given spend level.")
-        if (
-            self.seed != other.seed
-            or self.n_bootstrap != other.n_bootstrap
-            or self._dim[0] != other._dim[0]
-            or not self.paired_inference
-            or not other.paired_inference
-        ):
-            raise ValueError(
-                """Paired comparisons require maq objects to be fit with paired_inference=True
-                as well as with the same random seed, bootstrap replicates, and data."""
-            )
-
-        # Estimate an AUC via estimating the difference \int_{0}^{\bar B} Q_a(B)dB - \int_{0}^{\bar B} Q_b(B)dB.
-        def _get_estimates(gain, spend_grid, path_idx):
-            if path_idx < 0:
-                estimates = np.asarray([0])
-            elif path_idx == spend_grid.shape[0] - 1:
-                area_offset = 0
-                # Are we summing beyond the point at which the curve plateaus?
-                if spend > spend_grid[path_idx]:
-                    spend_delta = spend - spend_grid[path_idx]
-                    area_offset = gain[:, path_idx] * spend_delta
-                estimates = np.nanmean(gain, axis=1) + area_offset
-            else:
-                interp_ratio = (spend - spend_grid[path_idx]) / (
-                    spend_grid[path_idx + 1] - spend_grid[path_idx]
-                )
-                if interp_ratio < 1e-10:
-                    adj = np.repeat(np.nan, gain.shape[0])
-                else:
-                    adj = (
-                        gain[:, path_idx]
-                        + (gain[:, path_idx + 1] - gain[:, path_idx]) * interp_ratio
-                    )
-                estimates = np.nanmean(
-                    np.hstack((gain[:, : path_idx + 1], adj[:, None])), axis=1
-                )
-
-            return estimates
-
-        path_idx_lhs = np.searchsorted(self._path["spend"], spend, side="right") - 1
-        path_idx_rhs = np.searchsorted(other._path["spend"], spend, side="right") - 1
-
-        point_estimate = (
-            _get_estimates(
-                self._path["gain"][None, :], self._path["spend"], path_idx_lhs
-            )[0]
-            - _get_estimates(
-                other._path["gain"][None, :], other._path["spend"], path_idx_rhs
-            )[0]
-        )
-        if self.n_bootstrap < 2:
-            return point_estimate, 0
-        # Compute paired std.errors
-        estimates_lhs = _get_estimates(
-            self._path["gain_bs"], self._path["spend"], path_idx_lhs
-        )
-        estimates_rhs = _get_estimates(
-            other._path["gain_bs"], other._path["spend"], path_idx_rhs
-        )
-        std_err = np.nanstd(estimates_lhs - estimates_rhs)
-        if np.isnan(std_err):
-            std_err = 0
-
-        return point_estimate, std_err
-
-    def plot(self, horizontal_line=True, show_ci=True, **kwargs):
+    def plot(self, horizontal_line=True, show_ci=True, max_points=10_000, **kwargs):
         """Plot the Qini curve (requires matplotlib).
 
         If the underlying policy involves treating zero units (as would be the case if all
@@ -557,13 +139,16 @@ class MAQ:
             from matplotlib import rcParams
         except ImportError:
             raise ImportError("plot method requires matplotlib.")
+    
+        max_points = max_points or len(self.path_spend_)
+        step_size = max(1, len(self.path_spend_) // max_points)
 
         # matplotlib by default extends the axis xlim by 5% (rcParams["axes.xmargin"])
         xscaling = 1 + rcParams["axes.xmargin"]
         if "color" not in kwargs:
             kwargs["color"] = "black"
 
-        plt.plot(self.path_spend_, self.path_gain_, **kwargs)
+        plt.plot(self.path_spend_[::step_size], self.path_gain_[::step_size], **kwargs)
         if "label" in kwargs:
             plt.legend(loc="upper left")
             del kwargs["label"]
@@ -576,72 +161,33 @@ class MAQ:
                 **kwargs
             )
 
-        if show_ci:
-            ub = self.path_gain_ + 1.96 * self.path_std_err_
-            lb = self.path_gain_ - 1.96 * self.path_std_err_
-            plt.plot(
-                self.path_spend_,
-                ub,
-                color=kwargs["color"],
-                linestyle="dotted",
-                linewidth=1,
-            )
-            plt.plot(
-                self.path_spend_,
-                lb,
-                color=kwargs["color"],
-                linestyle="dotted",
-                linewidth=1,
-            )
-            if horizontal_line and self._path["complete_path"]:
-                plt.hlines(
-                    y=ub[-1],
-                    xmin=self.path_spend_[-1],
-                    xmax=plt.xlim()[1] / xscaling,
-                    color=kwargs["color"],
-                    linestyle="dotted",
-                    linewidth=1,
-                )
-                plt.hlines(
-                    y=lb[-1],
-                    xmin=self.path_spend_[-1],
-                    xmax=plt.xlim()[1] / xscaling,
-                    color=kwargs["color"],
-                    linestyle="dotted",
-                    linewidth=1,
-                )
-
         plt.xlabel("spend")
         plt.ylabel("gain")
 
     @property
     def path_spend_(self):
-        self._ensure_fit()
+        assert self._is_fit, "Solver object is not fit."
         return self._path["spend"]
 
     @property
     def path_gain_(self):
-        self._ensure_fit()
+        assert self._is_fit, "Solver object is not fit."
         return self._path["gain"]
 
     @property
     def path_std_err_(self):
-        self._ensure_fit()
+        assert self._is_fit, "Solver object is not fit."
         return self._path["std_err"]
 
     @property
     def path_allocated_unit_(self):
-        self._ensure_fit()
+        assert self._is_fit, "Solver object is not fit."
         return self._path["ipath"]
 
     @property
     def path_allocated_arm_(self):
-        self._ensure_fit()
+        assert self._is_fit, "Solver object is not fit."
         return self._path["kpath"]
-
-    def _ensure_fit(self):
-        if not self._is_fit:
-            raise ValueError("MAQ object is not fit.")
 
     def __repr__(self):
         if self._is_fit:
@@ -649,4 +195,4 @@ class MAQ:
                 self._dim[0], self._dim[1]
             )
         else:
-            return "MAQ object (not fit)."
+            return "MCKP solver object (not fit)."
